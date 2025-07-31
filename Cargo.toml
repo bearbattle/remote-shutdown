@@ -1,0 +1,9 @@
+[package]
+name = "remote-shutdown"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+config-file = "0.2.3"
+serde = { version = "1.0.219", features = ["derive"] }
+system_shutdown = "4.0.1"
