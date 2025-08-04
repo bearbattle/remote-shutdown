@@ -1,0 +1,8 @@
+# MQTT with WebSocket Secure
+proto = "mqtt-wss"
+
+[config]
+host = "wss://bemfa.com:9504/wss"
+port = 9504
+topic = "computer001"
+uid = "usertoken"

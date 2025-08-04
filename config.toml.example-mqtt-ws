@@ -1,0 +1,8 @@
+# MQTT with WebSocket (Unsupported by bemfa)
+proto = "mqtt-ws"
+
+[config]
+host = "ws://bemfa.com:9504/path"
+port = 9504
+topic = "computer001"
+uid = "usertoken"

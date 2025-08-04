@@ -1,0 +1,8 @@
+# TCP Protocol
+proto = "tcp"
+
+[config]
+host = "bemfa.com"
+port = 8344
+topic = "computer001"
+uid = "usertoken"

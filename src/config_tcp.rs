@@ -1,5 +1,4 @@
 use std::{
-    any::Any,
     collections::HashMap,
     error::Error,
     io::{Read, Write},
@@ -7,24 +6,30 @@ use std::{
     time::Duration,
 };
 
-use crate::config::{Config, Server};
+use crate::config::{Callback, Server};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Default, Debug)]
-pub(crate) struct TcpServerConfig {
+pub struct TcpServerConfig {
     host: String,
     port: u16,
     topic: String,
     uid: String,
 }
-impl Config for TcpServerConfig {}
 
-struct TcpServer<'a> {
-    config: &'a TcpServerConfig,
-    handlers: HashMap<&'a str, &'a dyn Fn(&str) -> Result<Box<dyn Any>, Box<dyn Error>>>,
+pub struct TcpServer {
+    config: TcpServerConfig,
+    handlers: HashMap<String, Callback>,
 }
 
-impl<'a> TcpServer<'a> {
+impl TcpServer {
+    pub fn new(config: TcpServerConfig) -> Box<dyn Server> {
+        Box::new(Self {
+            config,
+            handlers: HashMap::new(),
+        })
+    }
+
     fn init_stream(&self) -> Result<TcpStream, Box<dyn Error>> {
         let mut stream =
             TcpStream::connect(format!("{}:{}", &self.config.host, &self.config.port))?;
@@ -53,14 +58,22 @@ impl<'a> TcpServer<'a> {
             let mut msg = [0 as u8; 1024];
             match stream.read(&mut msg) {
                 Ok(msg_len) => {
-                    let msg_str = String::from_utf8(msg[0..msg_len].to_vec())?;
+                    let full_str = String::from_utf8(msg[0..msg_len].to_vec())?;
+                    let full_str = full_str.trim();
+                    let msg_str_start_index = full_str.find("msg=");
+                    if None == msg_str_start_index {
+                        dbg!("Received non-message data, ignoring...");
+                        continue;
+                    }
+                    let msg_str_start_index = msg_str_start_index.unwrap() + 4; // Skip "msg="
+                    let msg_str = &full_str[msg_str_start_index..];
                     dbg!(&msg_str);
                     let msg_map: HashMap<&str, &str> = msg_str
                         .trim()
                         .split('&')
                         .map(|x| {
                             let entry: Vec<&str> = x.split('=').collect();
-                            (entry[0], entry[1])
+                            (entry[0], *entry.get(1).unwrap_or(&""))
                         })
                         .collect();
                     for (k, v) in msg_map {
@@ -91,20 +104,9 @@ impl<'a> TcpServer<'a> {
     }
 }
 
-impl<'a> Server<'a, TcpServerConfig> for TcpServer<'a> {
-    fn new(config: &'a TcpServerConfig) -> Self {
-        Self {
-            config: config,
-            handlers: HashMap::new(),
-        }
-    }
-
-    fn register_handler(
-        &mut self,
-        keyword: &'a str,
-        handler: &'a dyn Fn(&str) -> Result<Box<dyn Any>, Box<dyn Error>>,
-    ) {
-        self.handlers.insert(keyword, handler);
+impl Server for TcpServer {
+    fn register_handler(&mut self, keyword: &str, handler: Callback) {
+        self.handlers.insert(keyword.to_string(), handler);
     }
 
     fn run_loop(&mut self) -> Result<(), Box<dyn Error>> {

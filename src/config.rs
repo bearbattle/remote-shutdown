@@ -1,19 +1,11 @@
 use std::{any::Any, error::Error};
 
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize};
 
-pub trait Config: DeserializeOwned + Default {}
+pub type Callback = fn(&str) -> Result<Box<dyn Any>, Box<dyn Error>>;
 
-pub trait Server<'a, T>
-where
-    T: Config,
-{
-    fn new(config: &'a T) -> Self;
-    fn register_handler(
-        &mut self,
-        keyword: &'a str,
-        handler: &'a dyn Fn(&str) -> Result<Box<dyn Any>, Box<dyn Error>>,
-    );
+pub trait Server {
+    fn register_handler(&mut self, keyword: &str, handler: Callback);
     fn run_loop(&mut self) -> Result<(), Box<dyn Error>>;
 }
 
@@ -24,17 +16,17 @@ use crate::config_tcp::TcpServerConfig;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "proto", content = "config")]
-enum LocalConfig {
+pub enum LocalConfig {
     #[serde(rename = "tcp")]
     Tcp(TcpServerConfig),
     #[serde(rename = "mqtt")]
     PlainMqtt(PlainMqttServerConfig),
     #[serde(rename = "mqtt-tls")]
-    TLSMqtt(TlsMqttServerConfig),
+    TlsMqtt(TlsMqttServerConfig),
     #[serde(rename = "mqtt-ws")]
-    WSMqtt(WsMqttServerConfig),
+    WsMqtt(WsMqttServerConfig),
     #[serde(rename = "mqtt-wss")]
-    WSSMqtt(WssMqttServerConfig),
+    WssMqtt(WssMqttServerConfig),
 }
 
 #[cfg(test)]
@@ -83,6 +75,4 @@ uid = "123456789"
         );
         println!("{:#?}", import_config);
     }
-
-    
 }

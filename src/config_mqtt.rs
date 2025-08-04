@@ -1,14 +1,16 @@
-use std::{any::Any, collections::HashMap, error::Error, time::Duration};
+use std::{collections::HashMap, error::Error, time::Duration};
 
-use crate::config::{Config, Server};
+use crate::config::{Callback, Server};
 use rumqttc::{
-    Client, Connection, MqttOptions, Transport,
+    Client, Connection,
+    Event::Incoming,
+    MqttOptions, Transport,
     tokio_rustls::{self, rustls::ClientConfig},
 };
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
-enum MqttServerConfig {
+pub enum MqttServerConfig {
     Plain(PlainMqttServerConfig),
     TLS(TlsMqttServerConfig),
     WS(WsMqttServerConfig),
@@ -17,7 +19,7 @@ enum MqttServerConfig {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename = "config")]
-pub(crate) struct PlainMqttServerConfig {
+pub struct PlainMqttServerConfig {
     host: String,
     port: u16,
     topic: String,
@@ -26,7 +28,7 @@ pub(crate) struct PlainMqttServerConfig {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename = "config")]
-pub(crate) struct TlsMqttServerConfig {
+pub struct TlsMqttServerConfig {
     host: String,
     port: u16,
     topic: String,
@@ -35,7 +37,7 @@ pub(crate) struct TlsMqttServerConfig {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename = "config")]
-pub(crate) struct WsMqttServerConfig {
+pub struct WsMqttServerConfig {
     host: String,
     port: u16,
     topic: String,
@@ -44,7 +46,7 @@ pub(crate) struct WsMqttServerConfig {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename = "config")]
-pub(crate) struct WssMqttServerConfig {
+pub struct WssMqttServerConfig {
     host: String,
     port: u16,
     topic: String,
@@ -56,8 +58,6 @@ impl Default for MqttServerConfig {
         Self::Plain(PlainMqttServerConfig::default())
     }
 }
-
-impl Config for MqttServerConfig {}
 
 impl MqttServerConfig {
     fn uid(&self) -> &str {
@@ -97,12 +97,18 @@ impl MqttServerConfig {
     }
 }
 
-struct MqttServer<'a> {
-    config: &'a MqttServerConfig,
-    handlers: HashMap<&'a str, &'a dyn Fn(&str) -> Result<Box<dyn Any>, Box<dyn Error>>>,
+pub struct MqttServer {
+    config: MqttServerConfig,
+    handlers: HashMap<String, Callback>,
 }
 
-impl<'a> MqttServer<'a> {
+impl MqttServer {
+    pub fn new(config: MqttServerConfig) -> Box<dyn Server> {
+        Box::new(Self {
+            config: config,
+            handlers: HashMap::new(),
+        })
+    }
     fn init(&mut self) -> (Client, Connection) {
         let uid = self.config.uid();
         let host = self.config.host();
@@ -144,20 +150,9 @@ impl<'a> MqttServer<'a> {
     }
 }
 
-impl<'a> Server<'a, MqttServerConfig> for MqttServer<'a> {
-    fn new(config: &'a MqttServerConfig) -> Self {
-        Self {
-            config,
-            handlers: HashMap::new(),
-        }
-    }
-
-    fn register_handler(
-        &mut self,
-        keyword: &'a str,
-        handler: &'a dyn Fn(&str) -> Result<Box<dyn Any>, Box<dyn Error>>,
-    ) {
-        self.handlers.insert(keyword, handler);
+impl Server for MqttServer {
+    fn register_handler(&mut self, keyword: &str, handler: Callback) {
+        self.handlers.insert(keyword.to_string(), handler);
     }
 
     fn run_loop(&mut self) -> Result<(), Box<dyn Error>> {
@@ -169,8 +164,35 @@ impl<'a> Server<'a, MqttServerConfig> for MqttServer<'a> {
 
         loop {
             if let Some(notification) = connection.iter().next() {
-                dbg!("Notification = {:?}", notification);
-                // TODO: 实现消息处理逻辑，调用已注册的处理程序
+                dbg!("Notification = {:?}", &notification);
+                if let Ok(msg) = notification
+                    && let Incoming(packet) = msg
+                {
+                    match packet {
+                        rumqttc::Packet::Publish(publish) => {
+                            let payload = String::from_utf8(publish.payload.to_vec())?;
+                            dbg!(&payload);
+                            let msg_map: HashMap<&str, &str> = payload
+                                .trim()
+                                .split('&')
+                                .map(|x| {
+                                    let entry: Vec<&str> = x.split('=').collect();
+                                    (entry[0], *entry.get(1).unwrap_or(&""))
+                                })
+                                .collect();
+                            for (k, v) in msg_map {
+                                if let Some(handler) = self.handlers.get(k) {
+                                    if let Err(e) = handler(v) {
+                                        return Err(e);
+                                    };
+                                }
+                            }
+                        }
+                        other => {
+                            dbg!(other);
+                        }
+                    }
+                }
             }
         }
     }

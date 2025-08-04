@@ -1,0 +1,8 @@
+# MQTT Protocol (Plain)
+proto = "mqtt"
+
+[config]
+host = "bemfa.com"
+port = 9501
+topic = "computer001"
+uid = "usertoken"

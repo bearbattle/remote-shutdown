@@ -1,7 +1,8 @@
-proto = "tcp"
+# MQTT with TLS
+proto = "mqtt-tls"
 
 [config]
 host = "bemfa.com"
-port = 8344
+port = 9503
 topic = "computer001"
 uid = "usertoken"
