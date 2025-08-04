@@ -1,3 +1,5 @@
+// remote-shutdown: Use TCP/MQTT to shutdown device
+// Copyright (C) 2025 Bear Battle
 mod config;
 mod config_mqtt;
 mod config_tcp;

@@ -1,0 +1,92 @@
+name: Build remote-shutdown for multiple platforms
+
+on:
+  push:
+    tags:
+      - v**
+
+jobs:
+  release:
+    name: Release - ${{ matrix.platform.os_name }}
+    strategy:
+      matrix:
+        platform:
+          - os_name: Linux-x86_64-musl
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            toolchain: stable
+            args: "--release"
+
+          - os_name: Linux-ARM64-musl
+            os: ubuntu-latest
+            host: x86_64-unknown-linux-gnu
+            target: aarch64-unknown-linux-musl
+            toolchain: stable
+            args: "--release"
+
+          - os_name: Linux-Armv7-musl
+            os: ubuntu-latest
+            host: x86_64-unknown-linux-gnu
+            target: armv7-unknown-linux-musleabihf
+            toolchain: nightly
+            args: "--release"
+
+          - os_name: Linux-MIPS-musl
+            os: ubuntu-latest
+            host: x86_64-unknown-linux-gnu
+            target: mipsel-unknown-linux-musl
+            toolchain: nightly
+            args: "--release"
+
+          - os_name: Windows-x86_64-msvc
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            toolchain: stable
+            args: "--release"
+
+          - os_name: macOS-x86_64
+            os: macOS-latest
+            target: x86_64-apple-darwin
+            toolchain: stable
+            args: "--release"
+
+          - os_name: macOS-apple
+            os: macOS-latest
+            target: aarch64-apple-darwin
+            toolchain: stable
+            args: "--release"
+
+#          - os_name: Windows-i686-mscv
+#            os: windows-latest
+#            target: i686-pc-windows-msvc
+
+
+    runs-on: ${{ matrix.platform.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Build binary
+        uses: bearbattle/actions-rust-cross@v0
+        with:
+          command: ${{ matrix.platform.command }}
+          host: ${{ matrix.platform.host }}
+          target: ${{ matrix.platform.target }}
+          toolchain: ${{ matrix.platform.toolchain }}
+          args: ${{ matrix.platform.args }}
+          strip: true
+
+      - name: Publish artifacts and release
+        uses: houseabsolute/actions-rust-release@v0
+        with:
+          executable-name: remote-shutdown
+          target: ${{ matrix.platform.target }}
+          extra-files: |
+            config.toml.example-mqtt
+            config.toml.example-mqtt-tls
+            config.toml.example-mqtt-ws
+            config.toml.example-mqtt-wss
+            config.toml.example-tcp
+            README.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
